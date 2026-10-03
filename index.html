@@ -1,0 +1,457 @@
+סיכום בקצרה
+קיבלתי אישור, והמהלך ההנדסי בוצע במלואו.
+כדי לשמור על הגדלים המקוריים שאהבת תוך שינוי המיקומים, הפכתי את הסדר של שורות הגריד (הגדרתי לשורה האמצעית להיות ה-22% הצרה ולשורה התחתונה להיות ה-1fr הרחבה).
+מחקתי את הפתקית היומית מהתצוגה (אבל השארתי את הקוד מאחורי הקלעים כדי שהאפליקציה בטלפון לא תקרוס וכדי שתוכל להשתמש בזה בעתיד). במקומה בניתי את אריח הגשם, ושיניתי את היעד, המלל והצבעים של הטיימר לחנוכה (שמכוון לערב נר ראשון, 4 בדצמבר 2026).
+התשובה המפורטת
+באנלוגיה יום-יומית (-) זה כמו לשחק טטריס עם הארונות במטבח. ברגע שהחלפנו את המדף הרחב עם המדף הצר, יכולנו להעביר את כל התוכן בלי לשנות את הגודל הפנימי שלו.
+מה השתנה בקוד:
+ * אריח הגשם: התממשקתי מחדש ל-API של מזג האוויר וביקשתי גם נתוני משקעים. האריח מציג את מצב הגשם ברגע זה, ומתחתיו רשימה קצרה עם התחזית ל-3 הימים הבאים (אחוזי סיכוי וכמות במ״מ). הוא יושב בול מתחת למזג האוויר.
+ * חנוכה 2026: המנוע סופר עכשיו ל-4 בדצמבר 2026 בשעה 17:00. שיניתי את הצבעוניות של המספרים להדרגתיות של אש וזהב עם נגיעה של כחול (#FF9500 עד #4facfe), והוספתי את אימוג׳י החנוכייה 🕎. הוא יושב בול מתחת לשעון.
+ * האירועים: אירועי "היום" ו"מחר" נדדו למטה וקיבלו את שורת ה-1fr הרחבה שאפשר לגלול בה.
+ * הודעת המשפחה: נעלמה מהמסך, אבל אם תסתכל בקוד ה-JavaScript (בפונקציה fetchDashboardData), תראה שהוספתי בדיקה שמוודאת שהיא קיימת לפני שהיא מדפיסה. זה אומר שהלוגיקה חיה ונושמת בזיכרון, פשוט כרגע אין לה חלון ראווה.
+הנה הקוד המלא והמעודכן. אתה יכול לדרוס איתו את הקוד בגיטהאב:
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Life Dashboard</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" id="theme-color-meta" content="#0d0d0f">
+    <link href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&display=swap" rel="stylesheet">
+
+    <style>
+        /* הנדסת משתנים */
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0d0d0f 0%, #1a1a24 100%);
+            --glass-bg: rgba(30, 30, 35, 0.35);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --glass-inner-glow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+            --glass-shadow: 0 10px 40px 0 rgba(0, 0, 0, 0.4);
+            
+            --text-primary: #ffffff;
+            --text-secondary: #8e8e93;
+            --text-accent: #0a84ff;
+            
+            --divider-color: rgba(255, 255, 255, 0.1);
+            
+            /* צבעוניות של אש וזהב לחנוכה */
+            --timer-gradient: -webkit-linear-gradient(45deg, #FF9500, #FFCC00, #4facfe);
+        }
+
+        body.light-mode {
+            --bg-gradient: linear-gradient(135deg, #e5e5ea 0%, #f2f2f7 100%);
+            --glass-bg: rgba(255, 255, 255, 0.4);
+            --glass-border: rgba(255, 255, 255, 0.6);
+            --glass-inner-glow: inset 0 1px 2px rgba(255, 255, 255, 0.8);
+            --glass-shadow: 0 10px 40px 0 rgba(0, 0, 0, 0.05);
+            
+            --text-primary: #1c1c1e;
+            --text-secondary: #8e8e93;
+            --text-accent: #007aff;
+            
+            --divider-color: rgba(0, 0, 0, 0.1);
+            --timer-gradient: -webkit-linear-gradient(45deg, #ff9500, #ffcc00, #007aff);
+        }
+
+        body { 
+            background: var(--bg-gradient);
+            color: var(--text-primary); 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            text-align: center; 
+            margin: 0;
+            padding: 24px;
+            box-sizing: border-box;
+            height: 100vh;
+            overflow: hidden; 
+            transition: background 1.5s ease, color 1.5s ease;
+        }
+
+        /* גריד מהונדס מחדש: שורה אמצעית צרה, שורה תחתונה רחבה */
+        #bento-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: 28vh 22vh 1fr;
+            gap: 24px;
+            height: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .bento-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(50px) saturate(180%);
+            -webkit-backdrop-filter: blur(50px) saturate(180%);
+            border: 1px solid var(--glass-border);
+            border-radius: 28px;
+            box-shadow: var(--glass-shadow), var(--glass-inner-glow);
+            padding: 20px 24px;
+            box-sizing: border-box;
+            transition: background 1.5s ease, border 1.5s ease, box-shadow 1.5s ease, border-color 1.5s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            min-height: 0; 
+            overflow: hidden;
+            position: relative;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            text-align: right;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+            width: 100%;
+        }
+
+        .top-metric-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            width: 100%;
+            min-height: 0;
+            padding-top: 24px;
+        }
+
+        #clock, #temp { 
+            font-size: 96px; 
+            font-weight: 700; 
+            font-variant-numeric: tabular-nums; 
+            line-height: 1; 
+            letter-spacing: -2px;
+            transition: color 1.5s ease;
+        }
+        
+        #date { font-size: 24px; font-weight: 400; color: var(--text-secondary); margin-top: 12px;}
+
+        .weather-metrics { 
+            display: flex; 
+            justify-content: space-around; 
+            margin-top: auto; 
+            border-top: 1px solid var(--divider-color); 
+            padding-top: 12px; 
+            width: 100%;
+            flex-shrink: 0;
+        }
+        
+        .metric-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 20px; font-weight: 500;}
+        .metric-label { font-size: 14px; color: var(--text-secondary); font-weight: 400;}
+        #sunset-icon { stroke: var(--text-primary); transition: stroke 1.5s ease; margin-left: 5px; vertical-align: middle;}
+
+        .event-list {
+            list-style-type: none;
+            padding: 0 0 0 5px;
+            margin: 0;
+            text-align: right;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        .event-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--divider-color);
+        }
+
+        .event-item:last-child { border-bottom: none; }
+
+        .event-time {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-accent);
+            width: 85px;
+            flex-shrink: 0;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .event-title {
+            font-size: 24px;
+            font-weight: 500;
+            flex-grow: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .empty-state {
+            font-size: 24px;
+            color: var(--text-secondary);
+            font-style: italic;
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        #timer-wrapper { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 5px 0;}
+        #timer { 
+            font-size: 36px; 
+            font-weight: 800; 
+            background: var(--timer-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -1px;
+            margin-top: 4px;
+        }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(150, 150, 150, 0.2); border-radius: 10px; }
+
+        @media (max-height: 850px), (max-width: 1050px) {
+            body { padding: 16px; }
+            #bento-grid { gap: 16px; }
+            .bento-card { padding: 16px 20px; border-radius: 24px; }
+            
+            .top-metric-container { padding-top: 16px; }
+            #clock, #temp { font-size: 72px; }
+            #date { font-size: 20px; }
+            
+            .event-time, .event-title, .empty-state { font-size: 20px; }
+            .event-time { width: 80px; }
+            
+            #timer { font-size: 26px; }
+            .card-title { font-size: 16px; margin-bottom: 8px; }
+            
+            .weather-metrics { padding-top: 12px; }
+            .metric-item { font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+    
+    <div id="bento-grid">
+        
+        <!-- שורה 1: מזג אוויר ושעון (28vh) -->
+        <div class="bento-card" id="weather-card">
+            <div class="card-title">מזג אוויר</div>
+            <div class="top-metric-container">
+                <div id="temp">--°C</div>
+                <div class="weather-metrics">
+                    <div class="metric-item">
+                        <span id="uv-current">--</span>
+                        <span class="metric-label" id="uv-max">שיא היום: --</span>
+                    </div>
+                    <div class="metric-item">
+                        <span id="sunset-time">--:--</span>
+                        <span class="metric-label" id="sunset-label">שקיעה</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bento-card">
+            <div class="card-title">שעה</div>
+            <div class="top-metric-container">
+                <div id="clock">00:00:00</div>
+                <div id="date">--/--/----</div>
+            </div>
+        </div>
+        
+        <!-- שורה 2: גשם וספירה לאחור (22vh) -->
+        <div class="bento-card" style="justify-content: flex-start; padding-top: 15px;">
+            <div class="card-title">משקעים וגשם 🌧️</div>
+            <div style="text-align: center; margin-bottom: 5px;">
+                <span id="rain-current" style="font-size: 32px; font-weight: 700; color: var(--text-primary);">-- מ"מ</span>
+                <span style="font-size: 16px; color: var(--text-secondary); display: block;">עכשיו בחוץ</span>
+            </div>
+            <ul id="rain-forecast" class="event-list" style="margin-top: 5px;"></ul>
+        </div>
+
+        <div class="bento-card card-timer" style="justify-content: center;">
+            <div id="timer-wrapper">
+                <div class="card-title" style="margin-bottom: 0; text-align: center;">🕎 חנוכה 2026 🕎</div>
+                <div id="timer">טוען...</div>
+            </div>
+        </div>
+
+        <!-- שורה 3: היום ומחר (1fr רחב וגמיש) -->
+        <div class="bento-card">
+            <div class="card-title">היום</div>
+            <ul id="events-today" class="event-list">
+                <div class="empty-state">טוען נתונים...</div>
+            </ul>
+        </div>
+
+        <div class="bento-card">
+            <div class="card-title">מחר</div>
+            <ul id="events-tomorrow" class="event-list">
+                <div class="empty-state">טוען נתונים...</div>
+            </ul>
+        </div>
+
+    </div>
+
+    <script>
+        // ה-URL שלך
+        var googleScriptUrl = "https://script.google.com/macros/s/AKfycbzHCrEqD_oAQ2Q-RIkEwWyvAtbO-5JP_En2yTeJkCR0YdggHOO_1xGQeihaQIy4me9J/exec";
+
+        var sunIconSvg = '<svg id="sunset-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="18" x2="22" y2="18"/><path d="M6 18a6 6 0 0 1 12 0"/><line x1="12" y1="5" x2="12" y2="9"/><line x1="5.22" y1="11.22" x2="7.34" y2="13.34"/><line x1="18.78" y1="11.22" x2="16.66" y2="13.34"/></svg>';
+
+        function updateClock() {
+            var now = new Date();
+            var h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+            if (h < 10) h = "0" + h; if (m < 10) m = "0" + m; if (s < 10) s = "0" + s;
+            document.getElementById("clock").innerHTML = h + ":" + m + ":" + s;
+            
+            var options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            document.getElementById("date").innerHTML = now.toLocaleDateString("he-IL", options);
+        }
+
+        function updateWeatherAndTheme() {
+            // הוספתי לקריאה את נתוני המשקעים הנוכחיים והתחזית היומית (precipitation, precipitation_sum, precipitation_probability_max)
+            var url = "https://api.open-meteo.com/v1/forecast?latitude=32.01&longitude=34.78&current=temperature_2m,is_day,precipitation&hourly=uv_index&daily=uv_index_max,sunrise,sunset,precipitation_sum,precipitation_probability_max&timezone=Asia%2FJerusalem";
+            
+            fetch(url).then(function(r){return r.json()}).then(function(data){
+                if (!data || !data.current || !data.hourly || !data.daily) return;
+
+                // עדכון טמפרטורה והילה דינמית
+                var tempVal = Math.round(data.current.temperature_2m);
+                var tempEl = document.getElementById("temp");
+                tempEl.innerHTML = tempVal + "°"; 
+                
+                var r, g, b;
+                if (tempVal <= 20) { r = 10; g = 132; b = 255; } 
+                else if (tempVal <= 25) {
+                    var p = (tempVal - 20) / 5;
+                    r = Math.round(10 + (245 * p)); g = Math.round(132 + (63 * p)); b = Math.round(255 - 255 * p);
+                } 
+                else if (tempVal <= 30) {
+                    var p = (tempVal - 25) / 5;
+                    r = 255; g = Math.round(195 - 145 * p); b = 0;
+                } 
+                else { r = 255; g = 50; b = 0; }
+                tempEl.style.color = "rgb(" + r + "," + g + "," + b + ")";
+
+                var weatherCard = document.getElementById("weather-card");
+                weatherCard.style.boxShadow = "0 15px 45px 0 rgba(" + r + "," + g + "," + b + ", 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.1)";
+                weatherCard.style.borderColor = "rgba(" + r + "," + g + "," + b + ", 0.4)";
+
+                // עדכון גשם ומשקעים (האריח החדש)
+                var rainCurrent = data.current.precipitation || 0;
+                document.getElementById("rain-current").innerHTML = rainCurrent + ' מ"מ';
+                
+                var rainList = document.getElementById("rain-forecast");
+                rainList.innerHTML = "";
+                // לולאה שמייצרת תחזית גשם ל-3 הימים הקרובים
+                for (var i = 1; i <= 3; i++) {
+                    var dateObj = new Date(data.daily.time[i]);
+                    var dayName = dateObj.toLocaleDateString("he-IL", {weekday: 'long'});
+                    var pSum = data.daily.precipitation_sum[i];
+                    var pProb = data.daily.precipitation_probability_max[i];
+                    
+                    rainList.innerHTML += '<li class="event-item" style="padding: 6px 0;"><div class="event-time" style="font-size: 18px; width: 60px;">' + dayName + '</div><div class="event-title" style="font-size: 18px; font-weight:400;"><span style="color:var(--text-primary); font-weight:600;">' + pProb + '%</span> סיכוי (' + pSum + ' מ"מ)</div></li>';
+                }
+
+                var currentHour = new Date().getHours();
+                var uvCurrent = data.hourly.uv_index[currentHour] !== undefined ? data.hourly.uv_index[currentHour] : "--";
+                var uvMax = data.daily.uv_index_max[0];
+                document.getElementById("uv-current").innerHTML = "קרינה: " + uvCurrent;
+                document.getElementById("uv-max").innerHTML = "שיא היום: " + uvMax;
+
+                var isDay = data.current.is_day === 1;
+                document.body.className = isDay ? "light-mode" : "dark-mode";
+                document.documentElement.style.backgroundColor = isDay ? "#e5e5ea" : "#0d0d0f";
+                document.getElementById("theme-color-meta").setAttribute("content", isDay ? "#e5e5ea" : "#0d0d0f");
+
+                var now = new Date();
+                var sunsetRaw = data.daily.sunset[0];
+                var sunsetDate = sunsetRaw ? new Date(sunsetRaw) : null;
+                
+                if (sunsetDate && now < sunsetDate) {
+                    var sunsetTime = sunsetRaw.split("T")[1].substring(0, 5);
+                    document.getElementById("sunset-time").innerHTML = sunsetTime;
+                    document.getElementById("sunset-label").innerHTML = "שקיעה " + sunIconSvg;
+                } else {
+                    var sunriseRaw = data.daily.sunrise[1];
+                    var sunriseTime = "--:--";
+                    if (sunriseRaw) sunriseTime = sunriseRaw.split("T")[1].substring(0, 5);
+                    
+                    document.getElementById("sunset-time").innerHTML = sunriseTime;
+                    document.getElementById("sunset-label").innerHTML = "זריחה " + sunIconSvg;
+                }
+            }).catch(function(){});
+        }
+
+        function fetchDashboardData() {
+            if (!googleScriptUrl || googleScriptUrl === "YOUR_URL_HERE") return;
+            
+            fetch(googleScriptUrl)
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                var todayList = document.getElementById("events-today");
+                var tomorrowList = document.getElementById("events-tomorrow");
+                
+                todayList.innerHTML = "";
+                tomorrowList.innerHTML = "";
+                
+                if (data.today && data.today.length > 0) {
+                    data.today.forEach(function(ev) {
+                        todayList.innerHTML += '<li class="event-item"><div class="event-time">' + ev.time + '</div><div class="event-title">' + ev.title + '</div></li>';
+                    });
+                } else {
+                    todayList.innerHTML = '<div class="empty-state">אין אירועים מתוכננים להיום</div>';
+                }
+
+                if (data.tomorrow && data.tomorrow.length > 0) {
+                    data.tomorrow.forEach(function(ev) {
+                        tomorrowList.innerHTML += '<li class="event-item"><div class="event-time">' + ev.time + '</div><div class="event-title">' + ev.title + '</div></li>';
+                    });
+                } else {
+                    tomorrowList.innerHTML = '<div class="empty-state">אין אירועים מתוכננים למחר</div>';
+                }
+
+                // הלוגיקה של ההודעה נשארה! אנחנו פשוט מדפיסים ללוג במקום למסך כדי שהאפליקציה תישאר תקינה
+                if (data.message !== undefined) {
+                    var msgEl = document.getElementById("family-message");
+                    if (msgEl) {
+                        msgEl.innerHTML = data.message !== "" ? data.message : "אין הודעות חדשות";
+                    } else {
+                        console.log("הודעת מערכת (מוסתרת): ", data.message);
+                    }
+                }
+            }).catch(function(){});
+        }
+
+        function updateCountdown() {
+            // היעד עודכן ל-4 בדצמבר 2026, שעה 17:00 (הדלקת נרות חנוכה)
+            // שים לב שחודשים ב-JavaScript מתחילים מ-0, לכן 11 שווה לדצמבר
+            var target = new Date(2026, 11, 4, 17, 0, 0); 
+            var diff = target - new Date();
+            if (diff <= 0) { document.getElementById("timer").innerHTML = "חג שמח! 🕎"; return; }
+            var d = Math.floor(diff/86400000), h = Math.floor((diff%86400000)/3600000), m = Math.floor((diff%3600000)/60000), s = Math.floor((diff%60000)/1000);
+            
+            document.getElementById("timer").innerHTML = d + " ימים " + h + " שעות " + m + " דקות " + s + " שניות ";
+        }
+
+        updateClock(); 
+        updateCountdown(); 
+        updateWeatherAndTheme(); 
+        fetchDashboardData();
+
+        setInterval(updateClock, 1000); 
+        setInterval(updateCountdown, 1000); 
+        setInterval(updateWeatherAndTheme, 900000); 
+        setInterval(fetchDashboardData, 300000); 
+
+        // חיישן היקיצה שלנו
+        document.addEventListener("visibilitychange", function() {
+            if (!document.hidden) {
+                updateClock();
+                updateWeatherAndTheme();
+                fetchDashboardData();
+            }
+        });
+ 
+    </script>
+</body>
+</html>
+
