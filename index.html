@@ -240,15 +240,10 @@
             </div>
         </div>
         
-        <div class="bento-card" style="justify-content: flex-start; padding-top: 15px;">
-            <div class="card-title">משקעים וגשם 🌧️</div>
-            <div style="text-align: center; flex-shrink: 0;">
-                <span id="rain-current" style="font-size: 32px; font-weight: 700; color: var(--text-primary);">-- מ"מ</span>
-                <span style="font-size: 16px; color: var(--text-secondary); display: block;">עכשיו בחוץ</span>
-            </div>
-            <div id="rain-forecast" style="display: flex; flex-direction: column; align-items: center; justify-content: center; flex-grow: 1;">
-                <!-- התוכן יוזרק לכאן דינמית -->
-            </div>
+        <div class="bento-card" style="justify-content: flex-start; gap: 16px;">
+            <div class="card-title" style="margin-bottom: 0;">משקעים וגשם 🌧️</div>
+            <div id="rain-current" style="font-size: 34px; font-weight: 700; color: var(--text-primary); text-align: center; margin-top: 10px;">טוען...</div>
+            <div id="rain-forecast" style="text-align: center;"></div>
         </div>
 
         <div class="bento-card card-timer" style="justify-content: center; align-items: center;">
@@ -337,17 +332,20 @@
                 weatherCard.style.borderColor = "rgba(" + r + "," + g + "," + b + ", 0.4)";
 
                 var rainCurrent = data.current.precipitation || 0;
-                document.getElementById("rain-current").innerHTML = rainCurrent + ' מ"מ';
+                var currentText = "לא יורד גשם כרגע";
+                if (rainCurrent > 0 && rainCurrent <= 2.5) currentText = "גשם קל בחוץ";
+                else if (rainCurrent > 2.5 && rainCurrent <= 7.5) currentText = "גשם בחוץ";
+                else if (rainCurrent > 7.5) currentText = "סוער בחוץ";
+                
+                document.getElementById("rain-current").innerHTML = currentText;
                 
                 var rainContainer = document.getElementById("rain-forecast");
                 var nextRainDay = null;
                 
-                // חיפוש היום הגשום הראשון מתוך ששת הימים הקרובים
                 for (var i = 1; i <= 6; i++) {
                     if (data.daily.precipitation_sum[i] > 0) {
                         nextRainDay = {
                             dateObj: new Date(data.daily.time[i]),
-                            sum: data.daily.precipitation_sum[i],
                             prob: data.daily.precipitation_probability_max[i]
                         };
                         break;
@@ -356,10 +354,16 @@
                 
                 if (nextRainDay) {
                     var dayName = nextRainDay.dateObj.toLocaleDateString("he-IL", {weekday: 'long'});
-                    rainContainer.innerHTML = '<div style="font-size: 26px; font-weight: 700; color: var(--text-accent);">' + dayName + '</div>' +
-                                              '<div style="font-size: 20px; color: var(--text-primary); margin-top: 4px; font-weight: 500;">' + nextRainDay.prob + '% סיכוי (' + nextRainDay.sum + ' מ"מ)</div>';
+                    var dayPrefix = dayName.replace("יום ", "ב");
+                    if (dayName === "שבת") dayPrefix = "בשבת";
+                    
+                    var probText = "סיכוי נמוך";
+                    if (nextRainDay.prob >= 30 && nextRainDay.prob <= 70) probText = "סיכוי בינוני";
+                    else if (nextRainDay.prob > 70) probText = "סיכוי גבוה";
+
+                    rainContainer.innerHTML = '<div style="font-size: 24px; font-weight: 600; color: var(--text-accent);">' + probText + ' לגשם ' + dayPrefix + '</div>';
                 } else {
-                    rainContainer.innerHTML = '<div style="font-size: 20px; color: var(--text-secondary); font-style: italic; padding-top: 10px;">לא צפוי גשם בימים הקרובים</div>';
+                    rainContainer.innerHTML = '<div style="font-size: 20px; color: var(--text-secondary); font-style: italic;">לא צפוי גשם בימים הקרובים</div>';
                 }
 
                 var currentHour = new Date().getHours();
